@@ -9,6 +9,8 @@ runner: "episode"
 
 # update the target network every {} training steps
 target_update_interval: 200
+wandb_project: "diversity5"
+wandb_group: "3s_vs_3z_fop"
 
 lr: 0.0005
 c_lr: 0.0005
