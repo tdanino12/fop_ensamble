@@ -19,11 +19,35 @@ class FOPCritic(nn.Module):
         self.fc2 = nn.Linear(64, 64)
         self.fc3 = nn.Linear(64, self.n_actions)
 
+        self.fc1_2 = nn.Linear(input_shape, 64)
+        self.fc2_2 = nn.Linear(64, 64)
+        self.fc3_2 = nn.Linear(64, self.n_actions)
+
+        self.fc1_3 = nn.Linear(input_shape, 64)
+        self.fc2_3 = nn.Linear(64, 64)
+        self.fc3_3 = nn.Linear(64, self.n_actions)
+
+        self.fc1_4 = nn.Linear(input_shape, 64)
+        self.fc2_4 = nn.Linear(64, 64)
+        self.fc3_4 = nn.Linear(64, self.n_actions)
+    
     def forward(self, inputs):
         x = F.relu(self.fc1(inputs))
         x = F.relu(self.fc2(x))
         q = self.fc3(x)
-        return q
+
+        x2 = F.relu(self.fc1_2(inputs))
+        x2 = F.relu(self.fc2_2(x2))
+        q2 = self.fc3_2(x2)
+
+        x3 = F.relu(self.fc1_3(inputs))
+        x3 = F.relu(self.fc2_3(x3))
+        q3 = self.fc3_3(x3)
+
+        x4 = F.relu(self.fc1_4(inputs))
+        x4 = F.relu(self.fc2_4(x4))
+        q4 = self.fc3_4(x4)
+        return (q+q2+q3+q4)/4,q,q2,q3,q4
 
     def _build_inputs(self, batch, bs, max_t):
         inputs = []
