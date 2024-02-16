@@ -43,7 +43,7 @@ class FOPMixer(nn.Module):
         adv_tot = th.sum(adv_q * lambda_weight, dim=1).reshape(bs, -1, 1)
         v_tot = th.sum(agent_qs + v, dim=-1).reshape(bs, -1, 1)
 
-        return adv_tot + v_tot 
+        return adv_tot + v_tot, lambda_weight
 
     def lambda_weight(self, states, actions): 
         states = states.reshape(-1, self.state_dim)
