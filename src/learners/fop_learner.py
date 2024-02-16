@@ -70,8 +70,8 @@ class FOP_Learner:
         log_pi = th.log(pi)
 
         inputs = self.critic1._build_inputs(batch, bs, max_t)
-        q_vals1 = self.critic1.forward(inputs)
-        q_vals2 = self.critic2.forward(inputs)
+        q_vals1,q1,q2,q3,q4 = self.critic1.forward(inputs)
+        q_vals2,q1_2,q2_2,q3_2,q4_2 = self.critic2.forward(inputs)
         q_vals = th.min(q_vals1, q_vals2)
 
         pi = mac_out[:,:-1].reshape(-1, self.n_actions)
@@ -146,8 +146,8 @@ class FOP_Learner:
         log_pi_taken = th.log(pi_taken)
 
         target_inputs = self.target_critic1._build_inputs(batch, bs, max_t)
-        target_q_vals1 = self.target_critic1.forward(target_inputs).detach()
-        target_q_vals2 = self.target_critic2.forward(target_inputs).detach()
+        target_q_vals1,q1,q2,q3,q4 = self.target_critic1.forward(target_inputs).detach()
+        target_q_vals2,q1_2,q2_2,q3_2,q3_4 = self.target_critic2.forward(target_inputs).detach()
 
         # directly caculate the values by definition
         next_vs1 = th.logsumexp(target_q_vals1 / alpha, dim=-1) * alpha
@@ -156,18 +156,31 @@ class FOP_Learner:
         next_chosen_qvals1 = th.gather(target_q_vals1, dim=3, index=next_actions).squeeze(3)
         next_chosen_qvals2 = th.gather(target_q_vals2, dim=3, index=next_actions).squeeze(3)
 
-        target_qvals1 = self.target_mixer1(next_chosen_qvals1, states, actions=next_actions_onehot, vs=next_vs1)
-        target_qvals2 = self.target_mixer2(next_chosen_qvals2, states, actions=next_actions_onehot, vs=next_vs2)
+        target_qvals1,lam_weights = self.target_mixer1(next_chosen_qvals1, states, actions=next_actions_onehot, vs=next_vs1)
+        target_qvals2,lam_weights2 = self.target_mixer2(next_chosen_qvals2, states, actions=next_actions_onehot, vs=next_vs2)
 
         target_qvals = th.min(target_qvals1, target_qvals2)
 
+        combined_tensor = th.cat((q1,q2,q3,q4), dim=-1)
+        # Calculate the variance
+        variance = th.var(combined_tensor,dim=-1)
+        total_var = variance*lam_weights
+        total_var = total_var.clone().detach()
+
+        combined_tensor2 = th.cat((q1_2,q2_2,q3_2,q4_2), dim=-1)
+        # Calculate the variance
+        variance2 = th.var(combined_tensor2,dim=-1)
+        total_var2 = variance2*lam_weights2
+        total_var2 = total_var2.clone().detach()
+
+        
         # Calculate td-lambda targets
         target_v = build_td_lambda_targets(rewards, terminated, mask, target_qvals, self.n_agents, self.args.gamma, self.args.td_lambda)
         targets = target_v - alpha * log_pi_taken.mean(dim=-1, keepdim=True)
 
         inputs = self.critic1._build_inputs(batch, bs, max_t)
-        q_vals1 = self.critic1.forward(inputs)
-        q_vals2 = self.critic2.forward(inputs)
+        q_vals1,_,_,_,_ = self.critic1.forward(inputs)
+        q_vals2,_,_,_,_ = self.critic2.forward(inputs)
 
         # directly caculate the values by definition
         vs1 = th.logsumexp(q_vals1 / alpha, dim=-1) * alpha
@@ -176,11 +189,11 @@ class FOP_Learner:
         q_taken1 = th.gather(q_vals1[:,:-1], dim=3, index=actions).squeeze(3)
         q_taken2 = th.gather(q_vals2[:,:-1], dim=3, index=actions).squeeze(3)
 
-        q_taken1 = mixer1(q_taken1, states[:, :-1], actions=actions_onehot, vs=vs1[:, :-1])
-        q_taken2 = mixer2(q_taken2, states[:, :-1], actions=actions_onehot, vs=vs2[:, :-1])
+        q_taken1,_ = mixer1(q_taken1, states[:, :-1], actions=actions_onehot, vs=vs1[:, :-1])
+        q_taken2,_ = mixer2(q_taken2, states[:, :-1], actions=actions_onehot, vs=vs2[:, :-1])
 
-        td_error1 = q_taken1 - targets.detach()
-        td_error2 = q_taken2 - targets.detach()
+        td_error1 = (q_taken1 - targets.detach())*(th.tensor(1)-total_var)
+        td_error2 = q_taken2 - targets.detach()*(th.tensor(1)-total_var2)
 
         mask = mask.expand_as(td_error1)
 
